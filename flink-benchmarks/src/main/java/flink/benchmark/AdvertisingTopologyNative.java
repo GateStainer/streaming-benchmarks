@@ -50,7 +50,7 @@ public class AdvertisingTopologyNative {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.getConfig().setGlobalJobParameters(flinkBenchmarkParams);
 
-		// Set the buffer timeout (default 100)
+	// Set the buffer timeout (default 100)
         // Lowering the timeout will lead to lower latencies, but will eventually reduce throughput.
         env.setBufferTimeout(flinkBenchmarkParams.getLong("flink.buffer-timeout", 100));
 
@@ -67,8 +67,10 @@ public class AdvertisingTopologyNative {
                         new SimpleStringSchema(),
                         flinkBenchmarkParams.getProperties())).setParallelism(Math.min(hosts * cores, kafkaPartitions));
 
-        messageStream
+        DataStream<Tuple2<String, String>> midResult = messageStream
                 .rebalance()
+				//Replicate string 100 times
+				//.flatMap(new Replicate())
                 // Parse the String as JSON
                 .flatMap(new DeserializeBolt())
 
@@ -76,19 +78,38 @@ public class AdvertisingTopologyNative {
                 .filter(new EventFilterBolt())
 
                 // project the event
-                .<Tuple2<String, String>>project(2, 5)
-
-                // perform join with redis data
-                .flatMap(new RedisJoinBolt())
+                .<Tuple2<String, String>>project(2, 5);
+        //midResult.flatMap(new RedisJoinBolt())
 
                 // process campaign
-                .keyBy(0)
-                .flatMap(new CampaignProcessor());
+          //      .keyBy(0)
+            //    .flatMap(new CampaignProcessor());
 
+        midResult.flatMap(new GetTime())
+                .writeAsText("/home/puxi/Desktop/flink.txt");
 
         env.execute();
     }
 
+    public static class GetTime implements FlatMapFunction<Tuple2<String, String>, Long> {
+
+        @Override
+        public void flatMap(Tuple2<String, String> input,
+                            Collector<Long> out) throws Exception {
+            out.collect(System.currentTimeMillis()-Long.parseLong((String) input.getField(1)));
+        }
+    }
+	public static class Replicate implements
+			FlatMapFunction<String, String> {
+
+		@Override
+		public void flatMap(String input, Collector<String> out)
+				throws Exception {
+			for(int i=0; i<100; i++) {
+				out.collect(input);
+			}
+	}
+}
     public static class DeserializeBolt implements
             FlatMapFunction<String, Tuple7<String, String, String, String, String, String, String>> {
 

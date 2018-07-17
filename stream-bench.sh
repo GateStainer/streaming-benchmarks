@@ -19,7 +19,6 @@ STORM_VERSION=${STORM_VERSION:-"1.0.6"}
 FLINK_VERSION=${FLINK_VERSION:-"1.3.3"}
 SPARK_VERSION=${SPARK_VERSION:-"1.6.3"}
 
-
 STORM_DIR="apache-storm-$STORM_VERSION"
 REDIS_DIR="redis-$REDIS_VERSION"
 KAFKA_DIR="kafka_$SCALA_BIN_VERSION-$KAFKA_VERSION"
@@ -33,10 +32,10 @@ ZK_HOST="localhost"
 ZK_PORT="2181"
 ZK_CONNECTIONS="$ZK_HOST:$ZK_PORT"
 TOPIC=${TOPIC:-"ad-events"}
-PARTITIONS=${PARTITIONS:-1}
-LOAD=${LOAD:-1000}
+PARTITIONS=${PARTITIONS:-4}
+LOAD=${LOAD:-20000}
 CONF_FILE=./conf/localConf.yaml
-TEST_TIME=${TEST_TIME:-240}
+TEST_TIME=${TEST_TIME:-120}
 
 pid_match() {
    local VAL=`ps -aef | grep "$1" | grep -v grep | awk '{print $2}'`
@@ -117,7 +116,7 @@ run() {
   OPERATION=$1
   if [ "SETUP" = "$OPERATION" ];
   then
-    $GIT clean -fd
+    #$GIT clean -fd
 
     echo 'kafka.brokers:' > $CONF_FILE
     echo '    - "localhost"' >> $CONF_FILE
@@ -134,10 +133,10 @@ run() {
 	echo 'process.cores: 4' >> $CONF_FILE
 	echo 'storm.workers: 1' >> $CONF_FILE
 	echo 'storm.ackers: 2' >> $CONF_FILE
-	echo 'spark.batchtime: 2000' >> $CONF_FILE
+	echo 'spark.batchtime: 10000' >> $CONF_FILE
 	
     $MVN clean install -Dspark.version="$SPARK_VERSION" -Dkafka.version="$KAFKA_VERSION" -Dflink.version="$FLINK_VERSION" -Dstorm.version="$STORM_VERSION" -Dscala.binary.version="$SCALA_BIN_VERSION" -Dscala.version="$SCALA_BIN_VERSION.$SCALA_SUB_VERSION"
-
+: '
     #Fetch and build Redis
     REDIS_FILE="$REDIS_DIR.tar.gz"
     fetch_untar_file "$REDIS_FILE" "http://download.redis.io/releases/$REDIS_FILE"
@@ -162,7 +161,7 @@ run() {
     #Fetch Spark
     SPARK_FILE="$SPARK_DIR.tgz"
     fetch_untar_file "$SPARK_FILE" "$APACHE_MIRROR/spark/spark-$SPARK_VERSION/$SPARK_FILE"
-
+'
   elif [ "START_ZK" = "$OPERATION" ];
   then
     start_if_needed dev_zookeeper ZooKeeper 10 "$STORM_DIR/bin/storm" dev-zookeeper

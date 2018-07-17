@@ -45,7 +45,7 @@ object KafkaRedisAdvertisingStream {
       case other => throw new ClassCastException(other + " not a String")
     }
     
-    // Create context with 2 second batch interval
+    // Create context with batchSize interval
     val sparkConf = new SparkConf().setAppName("KafkaRedisAdvertisingStream")
     val ssc = new StreamingContext(sparkConf, Milliseconds(batchSize))
 
@@ -67,14 +67,12 @@ object KafkaRedisAdvertisingStream {
     val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topicsSet)
 
-    //We can repartition to use more executors if desired
-    //    val messages_repartitioned = messages.repartition(10)
-
-
     //take the second tuple of the implicit Tuple2 argument _, by calling the Tuple2 method ._2
     //The first tuple is the key, which we don't use in this benchmark
     val kafkaRawData = messages.map(_._2)
 
+    //val multiMessages = kafkaRawData.flatMap(Replicate(_))
+	
     //Parse the String as JSON
     val kafkaData = kafkaRawData.map(parseJson(_))
 
@@ -84,6 +82,10 @@ object KafkaRedisAdvertisingStream {
     //project the event, basically filter the fileds.
     val projected = filteredOnView.map(eventProjection(_))
 
+    //val result = projected.map(data => data(1).toLong)
+    //result.saveAsTextFiles("/home/puxi/Desktop/spark_result.txt")
+
+    
     //Note that the Storm benchmark caches the results from Redis, we don't do that here yet
     val redisJoined = projected.mapPartitions(queryRedisTopLevel(_, redisHost), false)
 
@@ -104,9 +106,19 @@ object KafkaRedisAdvertisingStream {
       rdd.foreachPartition(writeRedisTopLevel(_, redisHost))
     }
 
+    val result = redisJoined.map(getTime(_))
+    result.saveAsTextFiles("/home/puxi/Desktop/spark_result.txt")
+
+
+
     // Start the computation
     ssc.start
     ssc.awaitTermination
+  }
+
+ 
+  def getTime(data: Array[String]): Long = {
+    currentTime.toLong - data(2).toLong
   }
 
   def joinHosts(hosts: Seq[String], port: String): String = {
@@ -119,6 +131,21 @@ object KafkaRedisAdvertisingStream {
       joined.append(_).append(":").append(port);
     })
     return joined.toString();
+  }
+
+  def Replicate(data: String): Array[String] = {
+	 Array(data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data,
+data, data, data, data, data, data, data, data, data, data)
   }
 
   def parseJson(jsonString: String): Array[String] = {
@@ -169,7 +196,7 @@ object KafkaRedisAdvertisingStream {
 
   def campaignTime(event: Array[String]): ((String, Long), String) = {
     val time_divisor: Long = 10000L
-    ((event(0),time_divisor * (event(2).toLong / time_divisor)), event(1))
+    ((event(0),time_divisor * (event(2).toLong / time_divisor)), event(2))
     //Key: (campaign_id, window_time),  Value: ad_id
   }
 
